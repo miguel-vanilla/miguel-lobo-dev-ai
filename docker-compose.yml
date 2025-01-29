@@ -9,10 +9,20 @@ services:
       - NODE_ENV=production
 
   typebot:
-    image: ghcr.io/typebot/typebot:latest
-    container_name: typebot
+    image: typebot/typebot:latest
     ports:
       - "3000:3000"
+    volumes:
+      - ./typebot/data:/app/data
+    depends_on:
+      - minio
+    env_file: .env
+    networks:
+      - ai-network
+    restart: unless-stopped
+    extends:
+      file: ./typebot/docker-compose.override.yml
+      service: typebot
 
   minio:
     image: minio/minio
