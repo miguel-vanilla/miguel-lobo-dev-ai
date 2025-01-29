@@ -1,62 +1,89 @@
-version: "3.8"
+version: '3.8'
+
 services:
+  # N8N with AI Starter Kit
   n8n:
-    image: n8nio/n8n
-    container_name: n8n
+    image: n8nio/n8n:latest
     ports:
       - "5678:5678"
+    volumes:
+      - ./n8n/data:/home/node/.n8n
     environment:
-      - NODE_ENV=production
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER
+      - N8N_BASIC_AUTH_PASSWORD
+    restart: unless-stopped
 
+  # Typebot
   typebot:
     image: typebot/typebot:latest
     ports:
       - "3000:3000"
     volumes:
-      - ./typebot/data:/app/data
+      - ./typebot/docker:/usr/src/app/docker
+    environment:
+      - DATABASE_URL=postgresql://postgres:typebot@typebot-db:5432/typebot
     depends_on:
-      - minio
-    env_file: .env
-    networks:
-      - ai-network
-    restart: unless-stopped
-    extends:
-      file: ./typebot/docker-compose.override.yml
-      service: typebot
+      - typebot-db
 
+  typebot-db:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=typebot
+      - POSTGRES_PASSWORD=typebot
+    volumes:
+      - ./typebot/data:/var/lib/postgresql/data
+
+  # MinIO
   minio:
-    image: minio/minio
-    container_name: minio
+    image: minio/minio:latest
     ports:
       - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./minio/data:/data
     environment:
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-    command: server /data
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
 
+  # DeepSeek Coder (1.3B model)
   deepseek-coder:
-    image: openai/deepseek-coder:1.3B
-    container_name: deepseek-coder
+    build: ./deepseek-coder
     ports:
-      - "8000:8000"
+      - "5000:5000"
+    volumes:
+      - ./deepseek-coder/models:/app/models
+    environment:
+      - MODEL_SIZE=1.3B
 
+  # F5 TTS
   f5-tts:
-    image: openai/f5-tts
-    container_name: f5-tts
+    build: ./f5-tts
     ports:
-      - "4000:4000"
+      - "5001:5001"
 
+  # Bolt.DIY (placeholder - needs custom setup)
   bolt-diy:
-    image: boltdiy/boltdiy
-    container_name: boltdiy
+    build: ./bolt-diy
     ports:
       - "8080:8080"
 
+  # NocoDB
   nocodb:
-    image: nocodb/nocodb
-    container_name: nocodb
+    image: nocodb/nocodb:latest
     ports:
-      - "8081:8080"
+      - "8082:8080"
     environment:
-      - NC_DB=sqlite
-      - NC_DB_SQLITE_FILENAME=/var/lib/sqlite/nocodb.db
+      - NC_DB=pg://postgres:postgres@nocodb-db:5432/nocodb
+    depends_on:
+      - nocodb-db
+
+  nocodb-db:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=nocodb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./nocodb/data:/var/lib/postgresql/data
